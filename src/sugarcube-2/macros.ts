@@ -1,3 +1,4 @@
+import { listenerCount } from 'process';
 import * as vscode from 'vscode';
 import * as yaml from 'yaml';
 import * as macroListCore from './macros.json';
@@ -14,6 +15,7 @@ export interface macro {
 
 export interface macroDef {
 	name?: string;
+	description?: string,
 	container?: boolean;
 	selfClose?: boolean;
 	children?: string[];
@@ -241,3 +243,33 @@ export const diagnostics = async function (raw: string) {
 
 	return d;
 };
+
+/**
+ * Provides hover information for macros.
+ */
+export const hover = async function(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.Hover | null> {
+	// Acquire list of macros in the file.
+	let collected = await collect(document.getText());
+
+	vscode.MarkdownString
+	// Find the macro with which our position intersects with
+	for (let i = 0; i < collected.macros.length; i++) {
+		let macro = collected.macros[i];
+		// If the hover-position is within the macro's range
+		// and if the list of macro definitions has the macro defined within
+		// This uses the unpleasant prototype access syntax because `collected.list` was created with a prototype of null, and does not have hasOwnProperty.
+		if (macro.range.contains(position) && Object.prototype.hasOwnProperty.call(collected.list, macro.name)) {
+			let macroDefinition = collected.list[macro.name];
+			if (typeof(macroDefinition.description) === "string") {
+				return new vscode.Hover(macroDefinition.description);
+			} else {
+				// We found the macro the user is hovering over, but there is no description.
+				// Thus, there is no need to continue looking for it.
+				return null;
+			}
+		}
+	}
+
+	// There was no macro intersecting, thus we have no hover result.
+	return null;
+}
